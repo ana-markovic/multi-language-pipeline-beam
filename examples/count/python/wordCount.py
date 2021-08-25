@@ -7,28 +7,28 @@ from apache_beam.io import ReadFromText
 from apache_beam.io import WriteToText
 from apache_beam.transforms.external import ImplicitSchemaPayloadBuilder
 from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.typehints import KV
 
 
 def run(input_path, output_path, pipeline_args):
   pipeline_options = PipelineOptions(pipeline_args)
 
   with beam.Pipeline(options=pipeline_options) as p:
-    input = p | 'Read' >> ReadFromText(input_path).with_output_types(str)
+    input = (
+        p
+        | 'Read' >> ReadFromText(input_path).with_output_types(str)
+        | 'ExtractWords' >> beam.FlatMap(lambda x: re.findall(r'[A-Za-z\']+', x)).with_output_types(str))
 
     java_output = (
         input
-        | 'ExtractWords' >> beam.ExternalTransform(
+        | 'CountWords' >> beam.ExternalTransform(
               'my.beam.transform.wordextract',
-              ImplicitSchemaPayloadBuilder({}),
-              "localhost:12345"))
+              ImplicitSchemaPayloadBuilder({'prefix': 'java:'}),
+              "localhost:12345").with_output_types(KV[str, int]))
 
+    output = java_output | 'PrepareResults' >> beam.MapTuple(lambda k, v: '%s: %s' % (k, v)).with_output_types(str)
 
-    output = (
-        java_output
-        | 'CountWords' >>  beam.combiners.Count.PerElement()
-        | 'PrepareResults' >> beam.MapTuple(lambda word, count: '%s: %s' % (word, count)))
-
-    output | 'Write' >> WriteToText(output_path)
+    output | 'Write' >> beam.io.WriteToText(output_path).with_input_types(str)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,6 @@
+.idea/
+examples/count/.python-version
+*.iml
+examples/count/java/target/
+examples/count/python/.python-version
+examples/count/python/env/
